@@ -207,8 +207,13 @@ if __name__ == "__main__":
     parser.add_argument(
         "--first-n", type=int, help="A debug option. Only run the first `n` judgments."
     )
+    parser.add_argument(
+        "--openai-org", type=str, help="The OpenAI organization ID for API calls."
+    )
     args = parser.parse_args()
-
+    if args.openai_org is not None:
+        import openai
+        openai.organization = args.openai_org
     question_file = f"data/{args.bench_name}/question.jsonl"
     answer_dir = f"data/{args.bench_name}/model_answer"
     ref_answer_dir = f"data/{args.bench_name}/reference_answer"
