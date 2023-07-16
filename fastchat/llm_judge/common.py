@@ -9,12 +9,12 @@ import json
 import os
 import re
 import time
-from typing import Optional
+from typing import Optional, List
 
 import openai
 import anthropic
 
-from fastchat.model.model_adapter import get_conversation_template
+from fastchat.model.model_adapter import get_conversation_template, Conversation
 
 # API setting constants
 API_MAX_RETRY = 16
@@ -655,3 +655,28 @@ def get_model_list(answer_dir):
     file_paths = glob.glob(f"{answer_dir}/*.jsonl")
     file_names = [os.path.splitext(os.path.basename(f))[0] for f in file_paths]
     return file_names
+
+def get_prev_conv(sad_filepath: str, happy_filepath: str, conv_type: str):
+    if conv_type == "none":
+        raise ValueError("conv_type cannot be none, must be 'sad' or 'happy'")
+    elif conv_type == "sad":
+        with open(sad_filepath, "r") as f:
+            messages = json.load(f)["turns"]
+    elif conv_type == "happy":
+        with open(happy_filepath, "r") as f:
+            messages = json.load(f)["turns"]
+    for message in messages:
+        assert message["role"] in ["user", "assistant"],\
+              "role must be 'user' or 'assistant', found {} for {} conv type".format(message["role"], conv_type)
+    return messages
+
+def add_conv_history(model: str, conv: Conversation, sad_filepath: str, happy_filepath: str, conv_type: str) -> Conversation:
+    if model not in ["gpt-3.5-turbo", "gpt-4"]:
+        Warning("previous conv history is only added for gpt-3.5-turbo and gpt-4")
+        return conv
+    if conv_type == "none":
+        return conv
+    messages = get_prev_conv(sad_filepath, happy_filepath, conv_type)
+    for message in messages:
+        conv.append_message(message["role"], message["content"])
+    return conv

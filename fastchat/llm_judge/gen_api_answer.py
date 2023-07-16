@@ -8,7 +8,7 @@ import json
 import os
 import time
 import concurrent.futures
-
+from functools import partial
 import shortuuid
 import tqdm
 
@@ -18,13 +18,14 @@ from fastchat.llm_judge.common import (
     chat_compeletion_openai,
     chat_compeletion_anthropic,
     chat_compeletion_palm,
+    add_conv_history,
 )
 from fastchat.llm_judge.gen_model_answer import reorg_answer_file
 from fastchat.model.model_adapter import get_conversation_template
 
 
 def get_answer(
-    question: dict, model: str, num_choices: int, max_tokens: int, answer_file: str
+    question: dict, model: str, num_choices: int, max_tokens: int, answer_file: str, preprocess_conv: callable
 ):
     if args.force_temperature:
         temperature = args.force_temperature
@@ -39,6 +40,9 @@ def get_answer(
         conv = get_conversation_template(model)
 
         turns = []
+        conv = preprocess_conv(model, conv)
+        import pdb ; pdb.set_trace()
+
         for j in range(len(question["turns"])):
             conv.append_message(conv.roles[0], question["turns"][j])
             conv.append_message(conv.roles[1], None)
@@ -69,7 +73,6 @@ def get_answer(
         "choices": choices,
         "tstamp": time.time(),
     }
-
     os.makedirs(os.path.dirname(answer_file), exist_ok=True)
     with open(answer_file, "a") as fout:
         fout.write(json.dumps(ans) + "\n")
@@ -111,6 +114,15 @@ if __name__ == "__main__":
     parser.add_argument(
         "--parallel", type=int, default=1, help="The number of concurrent API calls."
     )
+    parser.add_argument(
+        "--add-prev-conv", type=str, default="none", choices=["none", "sad", "happy"], help="add a previous conversation history"
+    )
+    parser.add_argument(
+        "--happy-filepath", type=str, default="data/mt_bench/happy_conv.json", help="Path to the file with happy conversation"
+    )
+    parser.add_argument(
+        "--sad-filepath", type=str, default="data/mt_bench/sad_conv.json", help="Path to the file with sad conversation"
+    )
     args = parser.parse_args()
 
     question_file = f"data/{args.bench_name}/question.jsonl"
@@ -120,8 +132,14 @@ if __name__ == "__main__":
         answer_file = args.answer_file
     else:
         answer_file = f"data/{args.bench_name}/model_answer/{args.model}.jsonl"
+        if args.add_prev_conv != "none":
+            answer_file = f"data/{args.bench_name}/model_answer/{args.model}_{args.add_prev_conv}.jsonl"
     print(f"Output to {answer_file}")
-
+    if args.add_prev_conv == "sad":
+        print(f"Using previous conversation history in {args.sad_filepath}")
+    elif args.add_prev_conv == "happy":
+        print(f"Using previous conversation history in {args.happy_filepath}")
+    preprocess_conv = partial(add_conv_history, sad_filepath=args.sad_filepath, happy_filepath=args.happy_filepath, conv_type=args.add_prev_conv)
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.parallel) as executor:
         futures = []
         for question in questions:
@@ -132,6 +150,7 @@ if __name__ == "__main__":
                 args.num_choices,
                 args.max_tokens,
                 answer_file,
+                preprocess_conv,
             )
             futures.append(future)
 
