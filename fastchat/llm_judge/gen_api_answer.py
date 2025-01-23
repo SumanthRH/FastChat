@@ -117,7 +117,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.openai_api_base is not None:
-        openai.api_base = args.openai_api_base
+        os.environ["OPENAI_API_BASE"] = args.openai_api_base
 
     question_file = f"data/{args.bench_name}/question.jsonl"
     questions = load_questions(question_file, args.question_begin, args.question_end)
